@@ -2,17 +2,60 @@ import os
 import queue
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, 
-    QToolBar, QSplitter, QTableView, QListView,
-    QTabWidget, QHeaderView,
+    QSplitter, QListView, QTabWidget, QHeaderView,
     QProgressBar, QStyledItemDelegate, QStyleOptionProgressBar,
-    QApplication, QStyle, QFileDialog, QLabel, QListWidget, QInputDialog
+    QApplication, QStyle, QFileDialog, QLabel, QListWidget, QInputDialog,
+    QPushButton, QGraphicsDropShadowEffect, QSizePolicy, QSpacerItem
 )
-from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot, QPoint
 from PyQt6.QtGui import QAction, QIcon, QColor, QPalette, QFont
-from PyQt6.QtWidgets import QStyle
 
 from gui.models import TorrentListModel, TorrentCardDelegate, PeersTableModel
 from gui.piece_map import PieceMapWidget
+
+class CustomTitleBar(QWidget):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.parent = parent
+        self.layout = QHBoxLayout()
+        self.layout.setContentsMargins(15, 10, 15, 10)
+        self.setLayout(self.layout)
+        self.setFixedHeight(50)
+        
+        # Branding
+        self.brand = QLabel("TorBoar")
+        self.brand.setObjectName("BrandLabel")
+        self.layout.addWidget(self.brand)
+        
+        self.layout.addSpacerItem(QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum))
+        
+        # Controls
+        self.btn_minimize = QPushButton("—")
+        self.btn_minimize.setObjectName("TitleBtn")
+        self.btn_minimize.setFixedSize(30, 30)
+        self.btn_minimize.clicked.connect(self.parent.showMinimized)
+        self.layout.addWidget(self.btn_minimize)
+        
+        self.btn_close = QPushButton("✕")
+        self.btn_close.setObjectName("TitleBtnClose")
+        self.btn_close.setFixedSize(30, 30)
+        self.btn_close.clicked.connect(self.parent.close)
+        self.layout.addWidget(self.btn_close)
+        
+        self.start_pos = None
+
+    def mousePressEvent(self, event):
+        if event.button() == Qt.MouseButton.LeftButton:
+            self.start_pos = event.globalPosition().toPoint()
+
+    def mouseMoveEvent(self, event):
+        if self.start_pos:
+            delta = event.globalPosition().toPoint() - self.start_pos
+            self.parent.move(self.parent.pos() + delta)
+            self.start_pos = event.globalPosition().toPoint()
+
+    def mouseReleaseEvent(self, event):
+        self.start_pos = None
 
 class MainWindow(QMainWindow):
     snapshot_received = pyqtSignal(object)
@@ -20,73 +63,133 @@ class MainWindow(QMainWindow):
     def __init__(self, command_queue: queue.Queue):
         super().__init__()
         self.command_queue = command_queue
-        self.setWindowTitle("TorBoar")
-        self._setup_ui()
-        self._apply_dark_theme()
+        
+        # Frameless Window setup
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.resize(1100, 700)
         
         # Set global font
         app_font = QFont("Segoe UI", 10)
         app_font.setStyleHint(QFont.StyleHint.SansSerif)
         QApplication.instance().setFont(app_font)
         
-        self.snapshot_received.connect(self._on_snapshot_received)
+        self._setup_ui()
+        self._apply_dark_theme()
         
+        self.snapshot_received.connect(self._on_snapshot_received)
         self.current_selected_hash = None
         
     def _apply_dark_theme(self):
         dark_stylesheet = """
-        QMainWindow, QWidget {
+        /* Main Container */
+        QWidget#MainContainer {
             background-color: #282A36;
+            border: 1px solid #44475A;
+            border-radius: 12px;
+        }
+        
+        /* Typography */
+        QLabel, QAbstractItemView, QPushButton {
             color: #F8F8F2;
             font-family: "Segoe UI", sans-serif;
         }
-        QToolBar {
-            background-color: #21222C;
-            border-bottom: 2px solid #191A21;
-            spacing: 12px;
-            padding: 5px;
+        
+        /* Title Bar */
+        CustomTitleBar {
+            background-color: transparent;
+            border-top-left-radius: 12px;
+            border-top-right-radius: 12px;
         }
-        QToolButton {
-            color: #F8F8F2;
-            padding: 8px 12px;
-            border: 1px solid transparent;
+        QLabel#BrandLabel {
+            font-size: 20px;
+            font-weight: 900;
+            color: #FF79C6;
+            letter-spacing: 2px;
+        }
+        QPushButton#TitleBtn, QPushButton#TitleBtnClose {
+            background: transparent;
+            border: none;
+            color: #6272A4;
+            font-weight: bold;
+            font-size: 14px;
             border-radius: 6px;
-            font-weight: 600;
         }
-        QToolButton:hover {
-            background-color: #44475A;
-            border: 1px solid #6272A4;
+        QPushButton#TitleBtn:hover {
+            background: #44475A;
+            color: #F8F8F2;
         }
-        QToolButton:pressed {
-            background-color: #191A21;
+        QPushButton#TitleBtnClose:hover {
+            background: #FF5555;
+            color: white;
         }
+        
+        /* Sidebar */
+        QWidget#Sidebar {
+            background-color: #21222C;
+            border-right: 1px solid #44475A;
+            border-bottom-left-radius: 12px;
+        }
+        QPushButton.SidebarBtn {
+            text-align: left;
+            padding: 12px 20px;
+            background: transparent;
+            border: none;
+            color: #6272A4;
+            font-size: 14px;
+            font-weight: bold;
+            border-radius: 8px;
+            margin: 5px 10px;
+        }
+        QPushButton.SidebarBtn:hover {
+            background: #44475A;
+            color: #F8F8F2;
+        }
+        QPushButton.SidebarBtn[active="true"] {
+            background: #6272A4;
+            color: #F8F8F2;
+        }
+        
+        /* Action Pill */
+        QWidget#ActionPill {
+            background-color: #21222C;
+            border: 1px solid #44475A;
+            border-radius: 20px;
+        }
+        QPushButton.ActionBtn {
+            background: transparent;
+            border: none;
+            color: #F8F8F2;
+            padding: 8px 15px;
+            font-weight: bold;
+            border-radius: 15px;
+        }
+        QPushButton.ActionBtn:hover {
+            background: #44475A;
+        }
+        QPushButton.ActionBtnPrimary {
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #BD93F9, stop:1 #FF79C6);
+            border: none;
+            color: #282A36;
+            padding: 8px 20px;
+            font-weight: 900;
+            border-radius: 15px;
+        }
+        QPushButton.ActionBtnPrimary:hover {
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #FF79C6, stop:1 #BD93F9);
+        }
+        
+        /* List View (Torrent Cards) */
         QListView {
             background-color: #282A36;
             border: none;
             outline: none;
+            padding: 10px;
         }
-        QTableView {
-            background-color: #21222C;
-            alternate-background-color: #282A36;
-            gridline-color: transparent;
-            border: 1px solid #44475A;
-            border-radius: 8px;
-            selection-background-color: #6272A4;
-            selection-color: white;
-            padding: 2px;
-        }
-        QTableView::item {
-            border: none;
-            padding: 4px;
-        }
-        QHeaderView::section {
-            background-color: #21222C;
-            color: #6272A4;
-            padding: 8px;
-            border: none;
-            border-bottom: 1px solid #44475A;
-            font-weight: bold;
-            text-transform: uppercase;
+        
+        /* Tabs & Splitters */
+        QSplitter::handle {
+            background-color: #44475A;
         }
         QTabWidget::pane {
             border: 1px solid #44475A;
@@ -113,101 +216,123 @@ class MainWindow(QMainWindow):
             background-color: #44475A;
             color: #F8F8F2;
         }
-        QListWidget {
-            background-color: #21222C;
-            border: 1px solid #44475A;
-            border-radius: 8px;
-            padding: 5px;
-        }
-        QListWidget::item {
-            padding: 10px;
-            border-radius: 6px;
-            margin-bottom: 2px;
-        }
-        QListWidget::item:selected {
-            background-color: #6272A4;
-            color: white;
-            font-weight: bold;
-        }
-        QListWidget::item:hover:!selected {
-            background-color: #44475A;
-        }
-        QSplitter::handle {
-            background-color: #44475A;
-        }
+        
+        /* Status Bar */
         QStatusBar {
             background-color: #21222C;
             color: #6272A4;
             border-top: 1px solid #44475A;
             font-weight: bold;
-        }
-        QLabel#BrandLabel {
-            font-size: 24px;
-            font-weight: 900;
-            color: #FF79C6;
-            padding: 10px;
-            letter-spacing: 2px;
+            border-bottom-left-radius: 12px;
+            border-bottom-right-radius: 12px;
         }
         """
         self.setStyleSheet(dark_stylesheet)
 
     def _setup_ui(self):
-        # 1. Top Toolbar
-        toolbar = QToolBar("Main Toolbar")
-        toolbar.setMovable(False)
-        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
-        self.addToolBar(toolbar)
-
-        # Brand Label inside Toolbar
-        brand_label = QLabel(" TORBOAR ")
-        brand_label.setObjectName("BrandLabel")
-        toolbar.addWidget(brand_label)
-        toolbar.addSeparator()
-
-        style = self.style()
-
-        add_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_FileIcon), "Add Torrent", self)
-        add_action.triggered.connect(self._on_add_torrent)
-        toolbar.addAction(add_action)
-
-        add_magnet_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView), "Add Magnet Link", self)
-        add_magnet_action.triggered.connect(self._on_add_magnet)
-        toolbar.addAction(add_magnet_action)
-
-        pause_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_MediaPause), "Pause", self)
-        pause_action.triggered.connect(self._on_pause_torrent)
-        toolbar.addAction(pause_action)
-
-        resume_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_MediaPlay), "Resume", self)
-        resume_action.triggered.connect(self._on_resume_torrent)
-        toolbar.addAction(resume_action)
-
-        delete_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_TrashIcon), "Delete", self)
-        delete_action.triggered.connect(self._on_delete_torrent)
-        toolbar.addAction(delete_action)
+        # 1. Main Container (Rounded edges)
+        self.main_container = QWidget()
+        self.main_container.setObjectName("MainContainer")
+        self.setCentralWidget(self.main_container)
         
-        toolbar.addSeparator()
+        # Add Drop Shadow
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(25)
+        shadow.setColor(QColor(0, 0, 0, 150))
+        shadow.setOffset(0, 5)
+        self.main_container.setGraphicsEffect(shadow)
         
-        stream_action = QAction(style.standardIcon(QStyle.StandardPixmap.SP_MediaSkipForward), "Toggle Stream Mode", self)
-        stream_action.triggered.connect(self._on_toggle_stream)
-        toolbar.addAction(stream_action)
-
-        # Main splitter for Sidebar + (Table/Details)
-        main_splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.setCentralWidget(main_splitter)
-        main_splitter.setContentsMargins(10, 10, 10, 10)
-
-        # 2. Left Sidebar
-        self.sidebar = QListWidget()
-        self.sidebar.addItems(["All", "Downloading", "Seeding", "Completed", "Active", "Inactive"])
-        self.sidebar.setMaximumWidth(200)
-        main_splitter.addWidget(self.sidebar)
-
-        # Right splitter for Table (Top) + Details (Bottom)
+        main_layout = QVBoxLayout(self.main_container)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+        
+        # 2. Title Bar
+        self.title_bar = CustomTitleBar(self)
+        main_layout.addWidget(self.title_bar)
+        
+        # 3. Main Content Area
+        content_layout = QHBoxLayout()
+        content_layout.setContentsMargins(0, 0, 0, 0)
+        content_layout.setSpacing(0)
+        main_layout.addLayout(content_layout)
+        
+        # 3a. Sidebar
+        sidebar = QWidget()
+        sidebar.setObjectName("Sidebar")
+        sidebar.setFixedWidth(220)
+        sidebar_layout = QVBoxLayout(sidebar)
+        sidebar_layout.setContentsMargins(0, 20, 0, 0)
+        sidebar_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+        
+        btn_all = QPushButton("All Torrents")
+        btn_all.setProperty("class", "SidebarBtn")
+        btn_all.setProperty("active", "true")
+        
+        btn_down = QPushButton("Downloading")
+        btn_down.setProperty("class", "SidebarBtn")
+        
+        btn_comp = QPushButton("Completed")
+        btn_comp.setProperty("class", "SidebarBtn")
+        
+        sidebar_layout.addWidget(btn_all)
+        sidebar_layout.addWidget(btn_down)
+        sidebar_layout.addWidget(btn_comp)
+        
+        content_layout.addWidget(sidebar)
+        
+        # 3b. Dashboard Area
+        dashboard_widget = QWidget()
+        dashboard_layout = QVBoxLayout(dashboard_widget)
+        dashboard_layout.setContentsMargins(20, 10, 20, 20)
+        dashboard_layout.setSpacing(15)
+        content_layout.addWidget(dashboard_widget, 1)
+        
+        # Action Pill (Replaces ToolBar)
+        action_pill = QWidget()
+        action_pill.setObjectName("ActionPill")
+        action_pill.setFixedHeight(50)
+        pill_layout = QHBoxLayout(action_pill)
+        pill_layout.setContentsMargins(10, 0, 10, 0)
+        
+        btn_add_magnet = QPushButton("+ Add Magnet")
+        btn_add_magnet.setProperty("class", "ActionBtnPrimary")
+        btn_add_magnet.clicked.connect(self._on_add_magnet)
+        
+        btn_add_file = QPushButton("Add File")
+        btn_add_file.setProperty("class", "ActionBtn")
+        btn_add_file.clicked.connect(self._on_add_torrent)
+        
+        btn_pause = QPushButton("Pause")
+        btn_pause.setProperty("class", "ActionBtn")
+        btn_pause.clicked.connect(self._on_pause_torrent)
+        
+        btn_resume = QPushButton("Resume")
+        btn_resume.setProperty("class", "ActionBtn")
+        btn_resume.clicked.connect(self._on_resume_torrent)
+        
+        btn_stream = QPushButton("Stream Mode")
+        btn_stream.setProperty("class", "ActionBtn")
+        btn_stream.clicked.connect(self._on_toggle_stream)
+        
+        btn_delete = QPushButton("Delete")
+        btn_delete.setProperty("class", "ActionBtn")
+        btn_delete.clicked.connect(self._on_delete_torrent)
+        
+        pill_layout.addWidget(btn_add_magnet)
+        pill_layout.addWidget(btn_add_file)
+        pill_layout.addSpacerItem(QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum))
+        pill_layout.addWidget(btn_pause)
+        pill_layout.addWidget(btn_resume)
+        pill_layout.addWidget(btn_stream)
+        pill_layout.addWidget(btn_delete)
+        
+        dashboard_layout.addWidget(action_pill)
+        
+        # 4. Main Splitter (Torrent Cards vs Piece Map)
         right_splitter = QSplitter(Qt.Orientation.Vertical)
-        main_splitter.addWidget(right_splitter)
+        dashboard_layout.addWidget(right_splitter, 1)
 
-        # 3. Main Central ListView (Replaces TableView)
+        # 4a. Main Central ListView (Torrent Cards)
         self.table_model = TorrentListModel(self)
         self.table_view = QListView()
         self.table_view.setModel(self.table_model)
@@ -217,59 +342,33 @@ class MainWindow(QMainWindow):
         # Apply custom card delegate
         delegate = TorrentCardDelegate(self.table_view)
         self.table_view.setItemDelegate(delegate)
-        
         self.table_view.selectionModel().selectionChanged.connect(self._on_selection_changed)
         right_splitter.addWidget(self.table_view)
-
-        # 4. Bottom Tabbed Detail Panel
+        
+        # 4b. Details Pane
         self.tabs = QTabWidget()
-        right_splitter.addWidget(self.tabs)
-        right_splitter.setSizes([500, 268]) # Default ratio
-
-        # Tab 1: General
-        self.tab_general = QWidget()
-        gen_layout = QVBoxLayout(self.tab_general)
-        self.lbl_info_hash = QLabel("Info Hash: ")
-        self.lbl_save_path = QLabel("Save Path: ")
-        self.lbl_piece_size = QLabel("Piece Size: ")
-        self.lbl_total_pieces = QLabel("Total Pieces: ")
-        gen_layout.addWidget(self.lbl_info_hash)
-        gen_layout.addWidget(self.lbl_save_path)
-        gen_layout.addWidget(self.lbl_piece_size)
-        gen_layout.addWidget(self.lbl_total_pieces)
-        gen_layout.addStretch()
-        self.tabs.addTab(self.tab_general, "General")
-
-        # Tab 2: Peers
-        self.tab_peers = QWidget()
-        peers_layout = QVBoxLayout(self.tab_peers)
-        self.peers_model = PeersTableModel(self)
-        self.peers_view = QTableView()
-        self.peers_view.setModel(self.peers_model)
-        self.peers_view.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        peers_layout.addWidget(self.peers_view)
-        self.tabs.addTab(self.tab_peers, "Peers")
-
-        # Tab 3: Files
-        self.tab_files = QWidget()
-        files_layout = QVBoxLayout(self.tab_files)
-        self.files_list = QListWidget()
-        files_layout.addWidget(self.files_list)
-        self.tabs.addTab(self.tab_files, "Files")
         
-        # Tab 4: Piece Map
-        self.tab_piece_map = QWidget()
-        piece_map_layout = QVBoxLayout(self.tab_piece_map)
+        # Piece Map Tab
         self.piece_map_widget = PieceMapWidget()
-        piece_map_layout.addWidget(self.piece_map_widget)
-        self.tabs.addTab(self.tab_piece_map, "Piece Map")
+        self.tabs.addTab(self.piece_map_widget, "Piece Map")
         
-        # 5. Bottom Status Bar
-        self.statusBar().showMessage("Ready")
-        self.lbl_global_speed = QLabel("D: 0 B/s | U: 0 B/s")
-        self.lbl_global_peers = QLabel("0 Connections")
-        self.statusBar().addPermanentWidget(self.lbl_global_speed)
-        self.statusBar().addPermanentWidget(self.lbl_global_peers)
+        # Peers Tab
+        peers_tab = QWidget()
+        peers_layout = QVBoxLayout(peers_tab)
+        # Using a simple QListView for peers or reusing the old TableModel...
+        # Wait, the old one was a QTableView, let's keep it simple for now as a QListView of strings to fit the modern UI
+        self.peers_list = QListWidget()
+        self.peers_list.setStyleSheet("background-color: #21222C; border: none;")
+        peers_layout.addWidget(self.peers_list)
+        self.tabs.addTab(peers_tab, "Peers")
+        
+        right_splitter.addWidget(self.tabs)
+        right_splitter.setSizes([400, 200])
+
+        # 5. Status Bar
+        self.status_lbl = QLabel(" Ready")
+        self.statusBar().addWidget(self.status_lbl)
+        self.statusBar().setStyleSheet("border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;")
 
     @pyqtSlot(object)
     def _on_snapshot_received(self, snapshot):
@@ -279,26 +378,31 @@ class MainWindow(QMainWindow):
         self.table_model.update_snapshot(snapshot)
         
         # Calculate globals
-        total_down = sum(t.get('down_speed', 0) for t in snapshot.torrents.values())
-        total_up = sum(t.get('up_speed', 0) for t in snapshot.torrents.values())
-        total_peers = sum(t.get('peers_connected', 0) for t in snapshot.torrents.values())
+        total_d = 0
+        total_u = 0
+        total_peers = 0
         
-        from gui.models import format_size
-        self.lbl_global_speed.setText(f"D: {format_size(total_down)}/s | U: {format_size(total_up)}/s")
-        self.lbl_global_peers.setText(f"{total_peers} Connections")
+        for h, dm in snapshot.torrents.items():
+            total_d += dm.get('down_speed', 0)
+            total_u += dm.get('up_speed', 0)
+            total_peers += dm.get('peers_connected', 0)
+            
+        d_mb = total_d / 1024 / 1024
+        u_mb = total_u / 1024 / 1024
         
-        # Update details if a row is selected
-        if self.current_selected_hash and self.current_selected_hash in snapshot.torrents:
-            t = snapshot.torrents[self.current_selected_hash]
+        self.status_lbl.setText(f" Active Peers: {total_peers}   |   D: {d_mb:.2f} MB/s   |   U: {u_mb:.2f} MB/s")
+        
+        # Update details pane for selected torrent
+        h = self.current_selected_hash
+        if h and h in snapshot.torrents:
+            t = snapshot.torrents[h]
             
-            # Update General
-            self.lbl_info_hash.setText(f"Info Hash: {t.get('info_hash')}")
-            self.lbl_save_path.setText(f"Save Path: {t.get('save_path')}")
-            self.lbl_piece_size.setText(f"Piece Size: {t.get('piece_size')} bytes")
-            self.lbl_total_pieces.setText(f"Total Pieces: {t.get('total_pieces')}")
-            
-            # Update Peers
-            self.peers_model.update_peers(t.get('peers_list', []))
+            # Update Peers list
+            self.peers_list.clear()
+            for p in t.get('peers_list', []):
+                p_ip = p.get('ip', '')
+                p_port = p.get('port', '')
+                self.peers_list.addItem(f"Peer: {p_ip}:{p_port}")
             
             # Update Piece Map
             self.piece_map_widget.update_map(
@@ -312,17 +416,9 @@ class MainWindow(QMainWindow):
             row = indexes[0].row()
             t = self.table_model._torrents[row]
             self.current_selected_hash = t.get('info_hash')
-            
-            # Populate files right away
-            self.files_list.clear()
-            for f in t.get('files', []):
-                self.files_list.addItem(f"{f['path']} ({f['length']} bytes)")
         else:
             self.current_selected_hash = None
-            self.peers_model.update_peers([])
-            self.files_list.clear()
-            self.lbl_info_hash.setText("Info Hash: ")
-            self.lbl_save_path.setText("Save Path: ")
+            self.peers_list.clear()
 
     def _on_add_torrent(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Open Torrent File", "", "Torrent Files (*.torrent);;All Files (*)")

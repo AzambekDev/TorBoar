@@ -48,7 +48,8 @@ class PeerConnection:
             self.connected = True
             return True
         except Exception as e:
-            print(f"Failed to connect to {self.ip}:{self.port}: {e}")
+            # Normal in BitTorrent for peers to be offline/unreachable
+            # print(f"Failed to connect to {self.ip}:{self.port}: {e}")
             return False
 
     async def handshake(self) -> bool:
@@ -93,7 +94,7 @@ class PeerConnection:
             return True
             
         except Exception as e:
-            print(f"Handshake failed with {self.ip}: {e}")
+            # print(f"Handshake failed with {self.ip}: {e}")
             return False
 
     async def send_message(self, msg_id: int, payload: bytes = b""):

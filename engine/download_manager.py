@@ -301,7 +301,8 @@ class DownloadManager:
             except asyncio.TimeoutError:
                 pass
             except Exception as e:
-                print(f"Peer worker error: {e}")
+                # print(f"Peer worker error: {e}")
+                pass
                 peer.disconnect()
                 break
                 

@@ -5,13 +5,107 @@ from PyQt6.QtWidgets import (
     QSplitter, QListView, QTabWidget, QHeaderView,
     QProgressBar, QStyledItemDelegate, QStyleOptionProgressBar,
     QApplication, QStyle, QFileDialog, QLabel, QListWidget, QInputDialog,
-    QPushButton, QGraphicsDropShadowEffect, QSizePolicy, QSpacerItem, QMenu
+    QPushButton, QGraphicsDropShadowEffect, QSizePolicy, QSpacerItem, QMenu,
+    QDialog, QLineEdit
 )
 from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot, QPoint
 from PyQt6.QtGui import QAction, QIcon, QColor, QPalette, QFont
 
 from gui.models import TorrentListModel, TorrentCardDelegate, PeersTableModel
 from gui.piece_map import PieceMapWidget
+
+class MagnetInputDialog(QDialog):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint | Qt.WindowType.Dialog)
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setFixedSize(500, 200)
+        
+        self.magnet_uri = ""
+        self._setup_ui()
+        
+    def _setup_ui(self):
+        container = QWidget(self)
+        container.setFixedSize(500, 200)
+        container.setStyleSheet("""
+            QWidget {
+                background-color: #1A1A1A;
+                border: 1px solid #333333;
+                border-radius: 8px;
+            }
+            QLabel {
+                color: #EAEAEA;
+                font-weight: 600;
+                font-size: 14px;
+                border: none;
+            }
+            QLineEdit {
+                background-color: #121212;
+                border: 1px solid #333333;
+                border-radius: 4px;
+                color: #EAEAEA;
+                padding: 10px;
+                font-size: 12px;
+            }
+            QLineEdit:focus {
+                border: 1px solid #555555;
+            }
+            QPushButton {
+                background-color: #2A2A2A;
+                border: 1px solid #333333;
+                color: #EAEAEA;
+                padding: 8px 16px;
+                border-radius: 4px;
+                font-weight: 600;
+            }
+            QPushButton:hover {
+                background-color: #333333;
+            }
+            QPushButton#PrimaryBtn {
+                background-color: #EAEAEA;
+                color: #121212;
+            }
+            QPushButton#PrimaryBtn:hover {
+                background-color: #FFFFFF;
+            }
+        """)
+        
+        # Shadow
+        shadow = QGraphicsDropShadowEffect(self)
+        shadow.setBlurRadius(20)
+        shadow.setColor(QColor(0, 0, 0, 150))
+        shadow.setOffset(0, 5)
+        container.setGraphicsEffect(shadow)
+        
+        layout = QVBoxLayout(container)
+        layout.setContentsMargins(20, 20, 20, 20)
+        
+        title = QLabel("Add Magnet Link")
+        layout.addWidget(title)
+        
+        self.input_field = QLineEdit()
+        self.input_field.setPlaceholderText("magnet:?xt=urn:btih:...")
+        layout.addWidget(self.input_field)
+        
+        layout.addStretch()
+        
+        btn_layout = QHBoxLayout()
+        btn_cancel = QPushButton("Cancel")
+        btn_cancel.clicked.connect(self.reject)
+        
+        btn_add = QPushButton("Add")
+        btn_add.setObjectName("PrimaryBtn")
+        btn_add.clicked.connect(self.accept)
+        
+        btn_layout.addStretch()
+        btn_layout.addWidget(btn_cancel)
+        btn_layout.addWidget(btn_add)
+        
+        layout.addLayout(btn_layout)
+        
+    def accept(self):
+        self.magnet_uri = self.input_field.text().strip()
+        super().accept()
 
 class CustomTitleBar(QWidget):
     def __init__(self, parent):
@@ -20,7 +114,7 @@ class CustomTitleBar(QWidget):
         self.layout = QHBoxLayout()
         self.layout.setContentsMargins(15, 10, 15, 10)
         self.setLayout(self.layout)
-        self.setFixedHeight(50)
+        self.setFixedHeight(40)
         
         # Branding
         self.brand = QLabel("TorBoar")
@@ -32,13 +126,13 @@ class CustomTitleBar(QWidget):
         # Controls
         self.btn_minimize = QPushButton("—")
         self.btn_minimize.setObjectName("TitleBtn")
-        self.btn_minimize.setFixedSize(30, 30)
+        self.btn_minimize.setFixedSize(24, 24)
         self.btn_minimize.clicked.connect(self.parent.showMinimized)
         self.layout.addWidget(self.btn_minimize)
         
         self.btn_close = QPushButton("✕")
         self.btn_close.setObjectName("TitleBtnClose")
-        self.btn_close.setFixedSize(30, 30)
+        self.btn_close.setFixedSize(24, 24)
         self.btn_close.clicked.connect(self.parent.close)
         self.layout.addWidget(self.btn_close)
         
@@ -68,9 +162,10 @@ class MainWindow(QMainWindow):
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         self.resize(1100, 700)
+        self.setAcceptDrops(True)
         
         # Set global font
-        app_font = QFont("Segoe UI", 10)
+        app_font = QFont("Segoe UI", 9)
         app_font.setStyleHint(QFont.StyleHint.SansSerif)
         QApplication.instance().setFont(app_font)
         
@@ -84,104 +179,104 @@ class MainWindow(QMainWindow):
         dark_stylesheet = """
         /* Main Container */
         QWidget#MainContainer {
-            background-color: #282A36;
-            border: 1px solid #44475A;
-            border-radius: 12px;
+            background-color: #121212;
+            border: 1px solid #2A2A2A;
+            border-radius: 8px;
         }
         
         /* Typography */
         QLabel, QAbstractItemView, QPushButton {
-            color: #F8F8F2;
+            color: #EAEAEA;
             font-family: "Segoe UI", sans-serif;
         }
         
         /* Title Bar */
         CustomTitleBar {
-            background-color: transparent;
-            border-top-left-radius: 12px;
-            border-top-right-radius: 12px;
+            background-color: #1A1A1A;
+            border-bottom: 1px solid #2A2A2A;
+            border-top-left-radius: 8px;
+            border-top-right-radius: 8px;
         }
         QLabel#BrandLabel {
-            font-size: 20px;
-            font-weight: 900;
-            color: #FF79C6;
-            letter-spacing: 2px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #888888;
+            letter-spacing: 1px;
+            text-transform: uppercase;
         }
         QPushButton#TitleBtn, QPushButton#TitleBtnClose {
             background: transparent;
             border: none;
-            color: #6272A4;
+            color: #888888;
             font-weight: bold;
-            font-size: 14px;
-            border-radius: 6px;
+            font-size: 10px;
+            border-radius: 4px;
         }
-        QPushButton#TitleBtn:hover {
-            background: #44475A;
-            color: #F8F8F2;
-        }
-        QPushButton#TitleBtnClose:hover {
-            background: #FF5555;
-            color: white;
+        QPushButton#TitleBtn:hover, QPushButton#TitleBtnClose:hover {
+            background: #2A2A2A;
+            color: #EAEAEA;
         }
         
         /* Sidebar */
         QWidget#Sidebar {
-            background-color: #21222C;
-            border-right: 1px solid #44475A;
-            border-bottom-left-radius: 12px;
+            background-color: #1A1A1A;
+            border-right: 1px solid #2A2A2A;
+            border-bottom-left-radius: 8px;
         }
         QPushButton.SidebarBtn {
             text-align: left;
-            padding: 12px 20px;
+            padding: 8px 16px;
             background: transparent;
             border: none;
-            color: #6272A4;
-            font-size: 14px;
-            font-weight: bold;
-            border-radius: 8px;
-            margin: 5px 10px;
+            color: #888888;
+            font-size: 13px;
+            font-weight: 500;
+            border-radius: 4px;
+            margin: 2px 10px;
         }
         QPushButton.SidebarBtn:hover {
-            background: #44475A;
-            color: #F8F8F2;
+            background: #222222;
+            color: #EAEAEA;
         }
         QPushButton.SidebarBtn[active="true"] {
-            background: #6272A4;
-            color: #F8F8F2;
+            background: #2A2A2A;
+            color: #EAEAEA;
+            font-weight: 600;
         }
         
-        /* Action Pill */
-        QWidget#ActionPill {
-            background-color: #21222C;
-            border: 1px solid #44475A;
-            border-radius: 20px;
+        /* Minimalist Action Header */
+        QWidget#ActionHeader {
+            background-color: transparent;
+            border-bottom: 1px solid #2A2A2A;
         }
         QPushButton.ActionBtn {
             background: transparent;
-            border: none;
-            color: #F8F8F2;
-            padding: 8px 15px;
-            font-weight: bold;
-            border-radius: 15px;
+            border: 1px solid #333333;
+            color: #EAEAEA;
+            padding: 6px 12px;
+            font-weight: 500;
+            border-radius: 4px;
+            font-size: 12px;
         }
         QPushButton.ActionBtn:hover {
-            background: #44475A;
+            background: #2A2A2A;
         }
         QPushButton.ActionBtnPrimary {
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #BD93F9, stop:1 #FF79C6);
+            background: #EAEAEA;
             border: none;
-            color: #282A36;
-            padding: 8px 20px;
-            font-weight: 900;
-            border-radius: 15px;
+            color: #121212;
+            padding: 6px 14px;
+            font-weight: 600;
+            border-radius: 4px;
+            font-size: 12px;
         }
         QPushButton.ActionBtnPrimary:hover {
-            background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #FF79C6, stop:1 #BD93F9);
+            background: #FFFFFF;
         }
         
         /* List View (Torrent Cards) */
         QListView {
-            background-color: #282A36;
+            background-color: #121212;
             border: none;
             outline: none;
             padding: 10px;
@@ -189,42 +284,44 @@ class MainWindow(QMainWindow):
         
         /* Tabs & Splitters */
         QSplitter::handle {
-            background-color: #44475A;
+            background-color: #2A2A2A;
         }
         QTabWidget::pane {
-            border: 1px solid #44475A;
-            background-color: #282A36;
-            border-radius: 8px;
+            border: 1px solid #2A2A2A;
+            background-color: #1A1A1A;
+            border-radius: 4px;
             margin-top: -1px;
         }
         QTabBar::tab {
-            background-color: #21222C;
-            color: #6272A4;
-            padding: 10px 20px;
-            border: 1px solid #44475A;
-            border-top-left-radius: 8px;
-            border-top-right-radius: 8px;
-            font-weight: bold;
+            background-color: #121212;
+            color: #888888;
+            padding: 8px 16px;
+            border: 1px solid #2A2A2A;
+            border-top-left-radius: 4px;
+            border-top-right-radius: 4px;
+            font-weight: 500;
             margin-right: 2px;
+            font-size: 12px;
         }
         QTabBar::tab:selected {
-            background-color: #6272A4;
-            color: #FFFFFF;
-            border: 1px solid #6272A4;
+            background-color: #2A2A2A;
+            color: #EAEAEA;
+            border: 1px solid #2A2A2A;
         }
         QTabBar::tab:hover:!selected {
-            background-color: #44475A;
-            color: #F8F8F2;
+            background-color: #1A1A1A;
+            color: #EAEAEA;
         }
         
         /* Status Bar */
         QStatusBar {
-            background-color: #21222C;
-            color: #6272A4;
-            border-top: 1px solid #44475A;
-            font-weight: bold;
-            border-bottom-left-radius: 12px;
-            border-bottom-right-radius: 12px;
+            background-color: #1A1A1A;
+            color: #888888;
+            border-top: 1px solid #2A2A2A;
+            font-weight: 500;
+            border-bottom-left-radius: 8px;
+            border-bottom-right-radius: 8px;
+            font-size: 11px;
         }
         """
         self.setStyleSheet(dark_stylesheet)
@@ -237,9 +334,9 @@ class MainWindow(QMainWindow):
         
         # Add Drop Shadow
         shadow = QGraphicsDropShadowEffect(self)
-        shadow.setBlurRadius(25)
-        shadow.setColor(QColor(0, 0, 0, 150))
-        shadow.setOffset(0, 5)
+        shadow.setBlurRadius(30)
+        shadow.setColor(QColor(0, 0, 0, 180))
+        shadow.setOffset(0, 10)
         self.main_container.setGraphicsEffect(shadow)
         
         main_layout = QVBoxLayout(self.main_container)
@@ -259,9 +356,9 @@ class MainWindow(QMainWindow):
         # 3a. Sidebar
         sidebar = QWidget()
         sidebar.setObjectName("Sidebar")
-        sidebar.setFixedWidth(220)
+        sidebar.setFixedWidth(200)
         sidebar_layout = QVBoxLayout(sidebar)
-        sidebar_layout.setContentsMargins(0, 20, 0, 0)
+        sidebar_layout.setContentsMargins(0, 15, 0, 0)
         sidebar_layout.setAlignment(Qt.AlignmentFlag.AlignTop)
         
         btn_all = QPushButton("All Torrents")
@@ -283,29 +380,30 @@ class MainWindow(QMainWindow):
         # 3b. Dashboard Area
         dashboard_widget = QWidget()
         dashboard_layout = QVBoxLayout(dashboard_widget)
-        dashboard_layout.setContentsMargins(20, 10, 20, 20)
-        dashboard_layout.setSpacing(15)
+        dashboard_layout.setContentsMargins(0, 0, 0, 0)
+        dashboard_layout.setSpacing(0)
         content_layout.addWidget(dashboard_widget, 1)
         
-        # Action Pill (Replaces ToolBar)
-        action_pill = QWidget()
-        action_pill.setObjectName("ActionPill")
-        action_pill.setFixedHeight(50)
-        pill_layout = QHBoxLayout(action_pill)
-        pill_layout.setContentsMargins(10, 0, 10, 0)
+        # Minimalist Action Header
+        action_header = QWidget()
+        action_header.setObjectName("ActionHeader")
+        action_header.setFixedHeight(45)
+        header_layout = QHBoxLayout(action_header)
+        header_layout.setContentsMargins(15, 0, 15, 0)
         
-        btn_add_magnet = QPushButton("+ Add Magnet")
+        btn_add_magnet = QPushButton("Add Magnet")
         btn_add_magnet.setProperty("class", "ActionBtnPrimary")
         btn_add_magnet.clicked.connect(self._on_add_magnet)
         
-        btn_add_file = QPushButton("Add File")
+        btn_add_file = QPushButton("Open File")
         btn_add_file.setProperty("class", "ActionBtn")
         btn_add_file.clicked.connect(self._on_add_torrent)
-        pill_layout.addWidget(btn_add_magnet)
-        pill_layout.addWidget(btn_add_file)
-        pill_layout.addSpacerItem(QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum))
         
-        dashboard_layout.addWidget(action_pill)
+        header_layout.addWidget(btn_add_magnet)
+        header_layout.addWidget(btn_add_file)
+        header_layout.addSpacerItem(QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum))
+        
+        dashboard_layout.addWidget(action_header)
         
         # 4. Main Splitter (Torrent Cards vs Piece Map)
         right_splitter = QSplitter(Qt.Orientation.Vertical)
@@ -316,10 +414,20 @@ class MainWindow(QMainWindow):
         self.table_view = QListView()
         self.table_view.setModel(self.table_model)
         self.table_view.setSelectionMode(QListView.SelectionMode.SingleSelection)
-        self.table_view.setSpacing(5)
+        self.table_view.setSpacing(2)
         
         # Apply custom card delegate
         delegate = TorrentCardDelegate(self.table_view)
+        # Update colors for delegate to match industrial aesthetic
+        delegate.bg_color = QColor("#1A1A1A")
+        delegate.bg_hover = QColor("#222222")
+        delegate.bg_selected = QColor("#2A2A2A")
+        delegate.text_color = QColor("#EAEAEA")
+        delegate.text_muted = QColor("#888888")
+        delegate.prog_bg = QColor("#121212")
+        delegate.prog_chunk1 = QColor("#555555")
+        delegate.prog_chunk2 = QColor("#EAEAEA")
+        
         self.table_view.setItemDelegate(delegate)
         self.table_view.selectionModel().selectionChanged.connect(self._on_selection_changed)
         
@@ -339,20 +447,38 @@ class MainWindow(QMainWindow):
         # Peers Tab
         peers_tab = QWidget()
         peers_layout = QVBoxLayout(peers_tab)
-        # Using a simple QListView for peers or reusing the old TableModel...
-        # Wait, the old one was a QTableView, let's keep it simple for now as a QListView of strings to fit the modern UI
         self.peers_list = QListWidget()
-        self.peers_list.setStyleSheet("background-color: #21222C; border: none;")
+        self.peers_list.setStyleSheet("background-color: #1A1A1A; border: none; font-size: 12px; color: #EAEAEA;")
         peers_layout.addWidget(self.peers_list)
         self.tabs.addTab(peers_tab, "Peers")
         
         right_splitter.addWidget(self.tabs)
-        right_splitter.setSizes([400, 200])
+        right_splitter.setSizes([500, 150])
 
         # 5. Status Bar
         self.status_lbl = QLabel(" Ready")
         self.statusBar().addWidget(self.status_lbl)
-        self.statusBar().setStyleSheet("border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;")
+        self.statusBar().setStyleSheet("border-bottom-left-radius: 8px; border-bottom-right-radius: 8px;")
+
+    # Drag and Drop Events
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.accept()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        for url in event.mimeData().urls():
+            file_path = url.toLocalFile()
+            if file_path.endswith('.torrent'):
+                save_path = QFileDialog.getExistingDirectory(self, "Select Save Directory for Dropped Torrent")
+                if save_path:
+                    self.command_queue.put({
+                        'action': 'add_torrent',
+                        'file_path': file_path,
+                        'save_path': save_path
+                    })
+        event.accept()
 
     @pyqtSlot(object)
     def _on_snapshot_received(self, snapshot):
@@ -412,18 +538,19 @@ class MainWindow(QMainWindow):
         menu = QMenu(self.table_view)
         menu.setStyleSheet("""
             QMenu { 
-                background-color: #21222C; 
-                color: #F8F8F2; 
-                border: 1px solid #44475A; 
-                border-radius: 6px; 
-                padding: 5px;
+                background-color: #1A1A1A; 
+                color: #EAEAEA; 
+                border: 1px solid #333333; 
+                border-radius: 4px; 
+                padding: 4px;
+                font-size: 12px;
             } 
             QMenu::item {
-                padding: 8px 25px;
-                border-radius: 4px;
+                padding: 6px 20px;
+                border-radius: 2px;
             }
             QMenu::item:selected { 
-                background-color: #44475A; 
+                background-color: #2A2A2A; 
             }
         """)
         
@@ -461,13 +588,13 @@ class MainWindow(QMainWindow):
                 })
 
     def _on_add_magnet(self):
-        magnet_uri, ok = QInputDialog.getText(self, "Add Magnet Link", "Enter Magnet URI:")
-        if ok and magnet_uri.strip().startswith("magnet:?"):
+        dialog = MagnetInputDialog(self)
+        if dialog.exec() == QDialog.DialogCode.Accepted and dialog.magnet_uri:
             save_path = QFileDialog.getExistingDirectory(self, "Select Save Directory")
             if save_path:
                 self.command_queue.put({
                     'action': 'add_magnet',
-                    'magnet_uri': magnet_uri.strip(),
+                    'magnet_uri': dialog.magnet_uri,
                     'save_path': save_path
                 })
 

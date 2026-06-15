@@ -9,11 +9,11 @@ class PieceMapWidget(QWidget):
         self.total_pieces = 0
         self.completed_pieces = set()
         
-        # Colors (Dracula Theme)
-        self.color_bg = QColor("#282A36")
-        self.color_missing = QColor("#21222C")
-        self.color_completed = QColor("#50FA7B") # Pastel Green
-        self.color_grid = QColor("#44475A")
+        # Monochromatic Pro Palette
+        self.color_bg = QColor("#121212")
+        self.color_missing = QColor("#2A2A2A")
+        self.color_have = QColor("#EAEAEA")
+        self.color_border = QColor("#1A1A1A")
         
         self.setMinimumHeight(200)
 
@@ -59,11 +59,9 @@ class PieceMapWidget(QWidget):
             y = row * square_size + gap
             
             if i in self.completed_pieces:
-                painter.setBrush(QBrush(self.color_completed))
-                painter.setPen(Qt.PenStyle.NoPen)
+                painter.fillRect(x, y, box_size, box_size, self.color_have)
             else:
-                painter.setBrush(QBrush(self.color_missing))
-                # Add a tiny grid border for missing pieces to look intricate
-                painter.setPen(QPen(self.color_grid, 1))
-                
+                painter.fillRect(x, y, box_size, box_size, self.color_missing)
+            
+            painter.setPen(self.color_border)
             painter.drawRect(x, y, box_size, box_size)

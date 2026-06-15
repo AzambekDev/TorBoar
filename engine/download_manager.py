@@ -7,6 +7,7 @@ from engine.torrent_file import TorrentFile
 from engine.magnet import MagnetLink
 from engine.peer_protocol import PeerConnection, MSG_REQUEST, MSG_PIECE, MSG_HAVE, MSG_BITFIELD, MSG_INTERESTED, MSG_EXTENDED, MSG_CHOKE, MSG_UNCHOKE
 from engine.bencoding import bencode, bdecode
+from engine.logger import log
 
 BLOCK_SIZE = 16384 # 16 KiB
 
@@ -68,12 +69,6 @@ class Piece:
             self.requested_blocks.clear()
             return False
             
-    def get_data(self) -> bytes:
-        data = bytearray()
-        for offset in sorted(self.blocks.keys()):
-            data.extend(self.blocks[offset])
-        return bytes(data)
-
 class DownloadManager:
     def __init__(self, target, save_path: str):
         self.save_path = save_path
@@ -166,14 +161,14 @@ class DownloadManager:
         sha1.update(assembled)
         
         if sha1.digest() == self.magnet.info_hash:
-            print("Metadata successfully retrieved and verified!")
+            log("Metadata successfully retrieved and verified!")
             self.fetching_metadata = False
             self.torrent = TorrentFile(info_raw=bytes(assembled))
             if not self.torrent.name:
                 self.torrent.name = self.magnet.name
             self._init_pieces()
         else:
-            print("Metadata hash mismatch, discarding.")
+            log("Metadata hash mismatch, discarding.")
             self.metadata_buffer.clear()
             self.metadata_requested.clear()
 
@@ -186,12 +181,13 @@ class DownloadManager:
         
         if piece.is_complete() and index not in self.completed_pieces:
             if piece.verify():
-                print(f"Piece {index} completed and verified!")
+                log(f"Piece {index} completed and verified!")
                 self.completed_pieces.add(index)
                 self.write_piece_to_disk(piece)
+                log(f"Piece {index} saved to disk.")
                 self.broadcast_have(index)
             else:
-                print(f"Piece {index} failed hash check.")
+                log(f"Piece {index} failed hash check.")
                 piece.blocks.clear()
                 piece.requested_blocks.clear()
 

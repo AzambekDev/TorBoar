@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QProgressBar, QStyledItemDelegate, QStyleOptionProgressBar,
     QApplication, QStyle, QFileDialog, QLabel, QListWidget, QInputDialog,
     QPushButton, QGraphicsDropShadowEffect, QSizePolicy, QSpacerItem, QMenu,
-    QDialog, QLineEdit
+    QDialog, QLineEdit, QPlainTextEdit
 )
 from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot, QPoint
 from PyQt6.QtGui import QAction, QIcon, QColor, QPalette, QFont
@@ -452,6 +452,12 @@ class MainWindow(QMainWindow):
         peers_layout.addWidget(self.peers_list)
         self.tabs.addTab(peers_tab, "Peers")
         
+        # Console Tab
+        self.console = QPlainTextEdit()
+        self.console.setReadOnly(True)
+        self.console.setStyleSheet("background-color: #1A1A1A; border: none; font-family: 'Consolas', 'JetBrains Mono', monospace; font-size: 11px; color: #50FA7B;")
+        self.tabs.addTab(self.console, "Console")
+        
         right_splitter.addWidget(self.tabs)
         right_splitter.setSizes([500, 150])
 
@@ -501,6 +507,11 @@ class MainWindow(QMainWindow):
         u_mb = total_u / 1024 / 1024
         
         self.status_lbl.setText(f" Active Peers: {total_peers}   |   D: {d_mb:.2f} MB/s   |   U: {u_mb:.2f} MB/s")
+        
+        # Append new logs
+        if hasattr(snapshot, 'logs') and snapshot.logs:
+            for log_msg in snapshot.logs:
+                self.console.appendPlainText(log_msg)
         
         # Update details pane for selected torrent
         h = self.current_selected_hash

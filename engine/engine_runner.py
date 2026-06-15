@@ -7,11 +7,13 @@ from engine.torrent_file import TorrentFile
 from engine.magnet import MagnetLink
 from engine.tracker import TrackerClient, generate_peer_id
 from engine.download_manager import DownloadManager
+from engine.logger import global_logger, log
 
 class EngineSnapshot:
     """A thread-safe snapshot of the engine state passed to the GUI."""
     def __init__(self):
         self.torrents: Dict[str, Dict[str, Any]] = {}
+        self.logs: list[str] = []
 
 class EngineRunner(threading.Thread):
     def __init__(self, command_queue: queue.Queue, snapshot_callback: Callable[[EngineSnapshot], None]):
@@ -22,6 +24,7 @@ class EngineRunner(threading.Thread):
         
         self.peer_id = generate_peer_id()
         self.downloads: Dict[str, DownloadManager] = {} # info_hash (hex) -> DownloadManager
+        self.last_log_idx = -1
 
     def run(self):
         asyncio.set_event_loop(self.loop)
@@ -89,6 +92,12 @@ class EngineRunner(threading.Thread):
         """Builds a state snapshot and sends it to the GUI every 500ms."""
         while True:
             snapshot = EngineSnapshot()
+            
+            # Fetch new logs
+            new_logs, highest_idx = global_logger.get_new_logs(self.last_log_idx)
+            snapshot.logs = new_logs
+            self.last_log_idx = highest_idx
+            
             for info_hash_hex, dm in self.downloads.items():
                 progress = 0
                 size = 0

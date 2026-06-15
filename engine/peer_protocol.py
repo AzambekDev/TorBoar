@@ -1,6 +1,7 @@
 import asyncio
 import struct
 from typing import Optional
+from engine.logger import log
 from engine.bencoding import bencode, bdecode
 
 # Message IDs
@@ -39,20 +40,19 @@ class PeerConnection:
         
         self.connected = False
 
-    async def connect(self) -> bool:
+    async def connect(self, timeout=10) -> bool:
         try:
-            self.reader, self.writer = await asyncio.wait_for(
-                asyncio.open_connection(self.ip, self.port),
-                timeout=10
-            )
+            fut = asyncio.open_connection(self.ip, self.port)
+            self.reader, self.writer = await asyncio.wait_for(fut, timeout=timeout)
             self.connected = True
+            log(f"[Peer {self.ip}] TCP Connection established.")
             return True
         except Exception as e:
             # Normal in BitTorrent for peers to be offline/unreachable
             # print(f"Failed to connect to {self.ip}:{self.port}: {e}")
             return False
 
-    async def handshake(self) -> bool:
+    async def handshake(self, timeout=10) -> bool:
         if not self.connected:
             return False
             
@@ -65,27 +65,30 @@ class PeerConnection:
         handshake_msg = pstrlen + pstr + reserved + self.info_hash + self.my_peer_id
         
         try:
+            log(f"[Peer {self.ip}] Sending BitTorrent handshake...")
             self.writer.write(handshake_msg)
             await self.writer.drain()
             
             # Read handshake response
-            response_pstrlen = await asyncio.wait_for(self.reader.readexactly(1), timeout=10)
-            pstrlen_int = response_pstrlen[0]
+            response = await asyncio.wait_for(self.reader.readexactly(68), timeout=timeout)
+            pstrlen_int = response[0]
             
             if pstrlen_int != len(pstr):
                 return False
                 
-            response_pstr = await asyncio.wait_for(self.reader.readexactly(pstrlen_int), timeout=10)
+            response_pstr = response[1:20]
             if response_pstr != pstr:
                 return False
                 
-            _reserved = await asyncio.wait_for(self.reader.readexactly(8), timeout=10)
-            response_info_hash = await asyncio.wait_for(self.reader.readexactly(20), timeout=10)
+            _reserved = response[20:28]
+            response_info_hash = response[28:48]
             
             if response_info_hash != self.info_hash:
+                log(f"[Peer {self.ip}] Info hash mismatch in handshake.")
                 return False
                 
-            self.peer_id = await asyncio.wait_for(self.reader.readexactly(20), timeout=10)
+            self.peer_id = response[48:68]
+            log(f"[Peer {self.ip}] Handshake successful.")
             
             # Check if peer supports extensions
             if _reserved[5] & 0x10:

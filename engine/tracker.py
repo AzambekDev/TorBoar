@@ -6,6 +6,7 @@ import random
 import socket
 from typing import List, Tuple
 from engine.bencoding import bdecode
+from engine.logger import log
 
 def generate_peer_id(client_prefix: bytes = b"-AG0001-") -> bytes:
     """Generates a 20-byte peer_id"""
@@ -23,6 +24,7 @@ class TrackerClient:
         """
         Announces to the tracker and returns a list of (ip, port) for peers.
         """
+        log(f"[Tracker] Announcing to {self.announce_url} (left={left}, event={event})")
         loop = asyncio.get_running_loop()
         try:
             if self.announce_url.startswith('udp://'):
@@ -41,9 +43,11 @@ class TrackerClient:
                 query_string = urllib.parse.urlencode(params)
                 url = f"{self.announce_url}?{query_string}"
                 response_data = await loop.run_in_executor(None, self._make_http_request, url)
-                return self._parse_http_response(response_data)
+                peers = self._parse_http_response(response_data)
+                log(f"[Tracker] Received {len(peers)} peers from {self.announce_url}")
+                return peers
         except Exception as e:
-            print(f"Tracker request failed ({self.announce_url}): {e}")
+            log(f"Tracker request failed ({self.announce_url}): {e}")
             return []
 
     def _make_http_request(self, url: str) -> bytes:
@@ -158,9 +162,10 @@ class TrackerClient:
                 peer_port = struct.unpack(">H", port_bytes)[0]
                 peer_list.append((ip, peer_port))
                 
+            log(f"[Tracker] Received {len(peer_list)} peers from {self.announce_url}")
             return peer_list
         except Exception as e:
-            print(f"UDP Tracker request failed ({self.announce_url}): {e}")
+            log(f"UDP Tracker request failed ({self.announce_url}): {e}")
             return []
         finally:
             sock.close()

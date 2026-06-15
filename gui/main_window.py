@@ -5,7 +5,7 @@ from PyQt6.QtWidgets import (
     QSplitter, QListView, QTabWidget, QHeaderView,
     QProgressBar, QStyledItemDelegate, QStyleOptionProgressBar,
     QApplication, QStyle, QFileDialog, QLabel, QListWidget, QInputDialog,
-    QPushButton, QGraphicsDropShadowEffect, QSizePolicy, QSpacerItem
+    QPushButton, QGraphicsDropShadowEffect, QSizePolicy, QSpacerItem, QMenu
 )
 from PyQt6.QtCore import Qt, pyqtSignal, pyqtSlot, QPoint
 from PyQt6.QtGui import QAction, QIcon, QColor, QPalette, QFont
@@ -301,30 +301,9 @@ class MainWindow(QMainWindow):
         btn_add_file = QPushButton("Add File")
         btn_add_file.setProperty("class", "ActionBtn")
         btn_add_file.clicked.connect(self._on_add_torrent)
-        
-        btn_pause = QPushButton("Pause")
-        btn_pause.setProperty("class", "ActionBtn")
-        btn_pause.clicked.connect(self._on_pause_torrent)
-        
-        btn_resume = QPushButton("Resume")
-        btn_resume.setProperty("class", "ActionBtn")
-        btn_resume.clicked.connect(self._on_resume_torrent)
-        
-        btn_stream = QPushButton("Stream Mode")
-        btn_stream.setProperty("class", "ActionBtn")
-        btn_stream.clicked.connect(self._on_toggle_stream)
-        
-        btn_delete = QPushButton("Delete")
-        btn_delete.setProperty("class", "ActionBtn")
-        btn_delete.clicked.connect(self._on_delete_torrent)
-        
         pill_layout.addWidget(btn_add_magnet)
         pill_layout.addWidget(btn_add_file)
         pill_layout.addSpacerItem(QSpacerItem(40, 20, QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Minimum))
-        pill_layout.addWidget(btn_pause)
-        pill_layout.addWidget(btn_resume)
-        pill_layout.addWidget(btn_stream)
-        pill_layout.addWidget(btn_delete)
         
         dashboard_layout.addWidget(action_pill)
         
@@ -343,6 +322,11 @@ class MainWindow(QMainWindow):
         delegate = TorrentCardDelegate(self.table_view)
         self.table_view.setItemDelegate(delegate)
         self.table_view.selectionModel().selectionChanged.connect(self._on_selection_changed)
+        
+        # Context Menu
+        self.table_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.table_view.customContextMenuRequested.connect(self._show_context_menu)
+        
         right_splitter.addWidget(self.table_view)
         
         # 4b. Details Pane
@@ -419,6 +403,51 @@ class MainWindow(QMainWindow):
         else:
             self.current_selected_hash = None
             self.peers_list.clear()
+
+    def _show_context_menu(self, position):
+        indexes = self.table_view.selectionModel().selectedIndexes()
+        if not indexes:
+            return
+            
+        menu = QMenu(self.table_view)
+        menu.setStyleSheet("""
+            QMenu { 
+                background-color: #21222C; 
+                color: #F8F8F2; 
+                border: 1px solid #44475A; 
+                border-radius: 6px; 
+                padding: 5px;
+            } 
+            QMenu::item {
+                padding: 8px 25px;
+                border-radius: 4px;
+            }
+            QMenu::item:selected { 
+                background-color: #44475A; 
+            }
+        """)
+        
+        pause_action = QAction("Pause Torrent", self)
+        pause_action.triggered.connect(self._on_pause_torrent)
+        menu.addAction(pause_action)
+        
+        resume_action = QAction("Resume Torrent", self)
+        resume_action.triggered.connect(self._on_resume_torrent)
+        menu.addAction(resume_action)
+        
+        menu.addSeparator()
+        
+        stream_action = QAction("Toggle Stream Mode", self)
+        stream_action.triggered.connect(self._on_toggle_stream)
+        menu.addAction(stream_action)
+        
+        menu.addSeparator()
+        
+        delete_action = QAction("Delete Torrent", self)
+        delete_action.triggered.connect(self._on_delete_torrent)
+        menu.addAction(delete_action)
+        
+        menu.exec(self.table_view.viewport().mapToGlobal(position))
 
     def _on_add_torrent(self):
         file_path, _ = QFileDialog.getOpenFileName(self, "Open Torrent File", "", "Torrent Files (*.torrent);;All Files (*)")

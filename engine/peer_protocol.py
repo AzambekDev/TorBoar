@@ -181,7 +181,7 @@ class PeerConnection:
                     self.peer_ut_metadata_id = m.get(b'ut_metadata')
                 self.metadata_size = bencoded_dict.get(b'metadata_size', 0)
         except Exception as e:
-            print(f"Failed to parse extended handshake: {e}")
+            log(f"Failed to parse extended handshake. Payload preview: {payload[:20].hex()} | Error: {e}")
 
     async def send_metadata_request(self, piece_index: int):
         if not self.connected or self.peer_ut_metadata_id is None:

@@ -14,3 +14,7 @@ venv.bak/
 *.mkv
 *.avi
 *.torrent
+build/
+dist/
+*.spec
+*.dat

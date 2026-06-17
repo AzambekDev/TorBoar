@@ -609,6 +609,15 @@ class MainWindow(QMainWindow):
                     'save_path': save_path
                 })
 
+    def add_magnet_from_args(self, magnet_uri: str):
+        save_path = QFileDialog.getExistingDirectory(self, "Select Save Directory for Magnet Link")
+        if save_path:
+            self.command_queue.put({
+                'action': 'add_magnet',
+                'magnet_uri': magnet_uri,
+                'save_path': save_path
+            })
+
     def _get_selected_hash(self):
         indexes = self.table_view.selectionModel().selectedIndexes()
         if indexes:

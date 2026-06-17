@@ -29,6 +29,7 @@ class PeerConnection:
         self.am_interested = False
         self.peer_choking = True
         self.peer_interested = False
+        self.pending_requests = 0
         
         self.peer_id: Optional[bytes] = None
         self.bitfield: bytearray = bytearray()
@@ -36,7 +37,9 @@ class PeerConnection:
         # Extensions
         self.supports_extensions = False
         self.peer_ut_metadata_id: Optional[int] = None
+        self.peer_ut_pex_id: Optional[int] = None
         self.metadata_size: int = 0
+        self.bytes_downloaded: int = 0
         
         self.connected = False
 
@@ -107,7 +110,7 @@ class PeerConnection:
         msg = length + bytes([msg_id]) + payload
         try:
             self.writer.write(msg)
-            await self.writer.drain()
+            # Removed await self.writer.drain() for extreme pipelining speed
         except Exception as e:
             print(f"Error sending message to {self.ip}: {e}")
             self.disconnect()
@@ -129,6 +132,7 @@ class PeerConnection:
     async def send_request(self, index: int, begin: int, length: int):
         payload = struct.pack(">III", index, begin, length)
         await self.send_message(MSG_REQUEST, payload)
+        self.pending_requests += 1
 
     async def receive_message(self) -> tuple[int, bytes]:
         """Returns (msg_id, payload). If keep-alive, returns (-1, b'')."""
@@ -155,13 +159,14 @@ class PeerConnection:
             self.writer.close()
         self.connected = False
 
-    async def send_extended_handshake(self, local_ut_metadata_id: int):
+    async def send_extended_handshake(self, local_ut_metadata_id: int, local_ut_pex_id: int):
         if not self.connected or not self.supports_extensions:
             return
             
         payload_dict = {
             b'm': {
-                b'ut_metadata': local_ut_metadata_id
+                b'ut_metadata': local_ut_metadata_id,
+                b'ut_pex': local_ut_pex_id
             }
         }
         
@@ -179,6 +184,7 @@ class PeerConnection:
                 m = bencoded_dict.get(b'm')
                 if isinstance(m, dict):
                     self.peer_ut_metadata_id = m.get(b'ut_metadata')
+                    self.peer_ut_pex_id = m.get(b'ut_pex')
                 self.metadata_size = bencoded_dict.get(b'metadata_size', 0)
         except Exception as e:
             log(f"Failed to parse extended handshake. Payload preview: {payload[:20].hex()} | Error: {e}")
@@ -213,3 +219,41 @@ class PeerConnection:
             return msg_type, piece, raw_data
         except Exception:
             return None, None, None
+
+    async def send_pex_message(self, added_peers: bytes, dropped_peers: bytes = b""):
+        if not self.connected or self.peer_ut_pex_id is None:
+            return
+            
+        payload_dict = {
+            b'added': added_peers,
+            b'dropped': dropped_peers
+        }
+        
+        payload = bytes([self.peer_ut_pex_id]) + bencode(payload_dict)
+        await self.send_message(MSG_EXTENDED, payload)
+
+    def parse_pex_message(self, payload: bytes) -> tuple[list[tuple[str, int]], list[tuple[str, int]]]:
+        if not payload:
+            return [], []
+            
+        try:
+            bencoded_dict, _, _ = bdecode(payload)
+            if not isinstance(bencoded_dict, dict):
+                return [], []
+                
+            added_raw = bencoded_dict.get(b'added', b'')
+            dropped_raw = bencoded_dict.get(b'dropped', b'')
+            
+            def parse_compact(data: bytes):
+                peers = []
+                for i in range(0, len(data), 6):
+                    if i + 6 <= len(data):
+                        ip_bytes = data[i:i+4]
+                        port = struct.unpack(">H", data[i+4:i+6])[0]
+                        ip = f"{ip_bytes[0]}.{ip_bytes[1]}.{ip_bytes[2]}.{ip_bytes[3]}"
+                        peers.append((ip, port))
+                return peers
+                
+            return parse_compact(added_raw), parse_compact(dropped_raw)
+        except Exception:
+            return [], []

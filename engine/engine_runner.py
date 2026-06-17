@@ -33,38 +33,50 @@ class EngineRunner(threading.Thread):
         self.loop.create_task(self._tracker_loop())
         self.loop.run_forever()
 
+    async def _announce_for_download(self, info_hash_hex: str, dm: DownloadManager):
+        if not dm.is_running or len(dm.active_peers) + len(dm.pending_peers) >= 150:
+            return
+            
+        trackers_to_try = []
+        if dm.torrent and dm.torrent.announce:
+            trackers_to_try.append(dm.torrent.announce)
+        elif dm.magnet and dm.magnet.trackers:
+            trackers_to_try.extend(dm.magnet.trackers)
+            
+        if not trackers_to_try:
+            return
+
+        info_hash = bytes.fromhex(info_hash_hex)
+        left = dm.torrent.total_size - dm.downloaded if dm.torrent else 1
+        
+        async def fetch_peers(announce_url):
+            tracker = TrackerClient(announce_url, info_hash, self.peer_id)
+            return await tracker.announce(
+                uploaded=int(dm.uploaded),
+                downloaded=int(dm.downloaded),
+                left=int(left)
+            )
+
+        tasks = [asyncio.create_task(fetch_peers(url)) for url in trackers_to_try]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        
+        for peers in results:
+            if isinstance(peers, list) and peers:
+                existing_ips = {p.ip for p in dm.active_peers + dm.pending_peers}
+                for ip, port in peers:
+                    if len(dm.active_peers) + len(dm.pending_peers) >= 200:
+                        break
+                    if ip not in existing_ips:
+                        from engine.peer_protocol import PeerConnection
+                        peer = PeerConnection(ip, port, info_hash, self.peer_id)
+                        dm.add_peer(peer)
+                        existing_ips.add(ip)
+
     async def _tracker_loop(self):
         """Periodically polls trackers for active downloads to find new peers."""
         while True:
             for info_hash_hex, dm in list(self.downloads.items()):
-                if dm.is_running and len(dm.active_peers) + len(dm.pending_peers) < 30:
-                    trackers_to_try = []
-                    if dm.torrent and dm.torrent.announce:
-                        trackers_to_try.append(dm.torrent.announce)
-                    elif dm.magnet and dm.magnet.trackers:
-                        trackers_to_try.extend(dm.magnet.trackers)
-                        
-                    info_hash = bytes.fromhex(info_hash_hex)
-                    left = dm.torrent.total_size - dm.downloaded if dm.torrent else 1
-                    
-                    for announce_url in trackers_to_try:
-                        tracker = TrackerClient(announce_url, info_hash, self.peer_id)
-                        
-                        peers = await tracker.announce(
-                            uploaded=int(dm.uploaded),
-                            downloaded=int(dm.downloaded),
-                            left=int(left)
-                        )
-                        
-                        if peers:
-                            existing_ips = {p.ip for p in dm.active_peers + dm.pending_peers}
-                            for ip, port in peers:
-                                if ip not in existing_ips:
-                                    from engine.peer_protocol import PeerConnection
-                                    peer = PeerConnection(ip, port, info_hash, self.peer_id)
-                                    dm.add_peer(peer)
-                            break
-                            
+                self.loop.create_task(self._announce_for_download(info_hash_hex, dm))
             await asyncio.sleep(15)
 
     async def _command_loop(self):
@@ -171,6 +183,7 @@ class EngineRunner(threading.Thread):
                 dm = DownloadManager(torrent, save_path)
                 self.downloads[info_hash_hex] = dm
                 self.loop.create_task(dm.run())
+                self.loop.create_task(self._announce_for_download(info_hash_hex, dm))
         except Exception as e:
             print(f"Error adding torrent: {e}")
 
@@ -182,6 +195,7 @@ class EngineRunner(threading.Thread):
                 dm = DownloadManager(magnet, save_path)
                 self.downloads[info_hash_hex] = dm
                 self.loop.create_task(dm.run())
+                self.loop.create_task(self._announce_for_download(info_hash_hex, dm))
         except Exception as e:
             print(f"Error adding magnet: {e}")
 

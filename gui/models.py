@@ -1,4 +1,4 @@
-from PyQt6.QtCore import Qt, QAbstractListModel, QAbstractTableModel, QModelIndex, QRect, QSize
+from PyQt6.QtCore import Qt, QAbstractListModel, QAbstractTableModel, QModelIndex, QRect, QSize, QPointF
 from PyQt6.QtGui import QPainter, QColor, QFont, QPen, QBrush, QLinearGradient
 from PyQt6.QtWidgets import QStyledItemDelegate, QStyle
 from typing import List, Dict, Any
@@ -102,12 +102,25 @@ class TorrentCardDelegate(QStyledItemDelegate):
         painter.setPen(QPen(self.text_muted))
         
         size_str = format_size(t.get('size', 0))
-        d_speed = format_size(t.get('down_speed', 0)) + "/s"
+        down_speed_raw = t.get('down_speed', 0)
+        d_speed = format_size(down_speed_raw) + "/s"
         u_speed = format_size(t.get('up_speed', 0)) + "/s"
         status = t.get('status', 'Unknown')
         progress = t.get('progress', 0)
         
-        sub_text = f"{status}  |  {size_str}  |  ↓ {d_speed}  |  ↑ {u_speed}"
+        eta_str = ""
+        if status == "Downloading" and down_speed_raw > 0:
+            bytes_remaining = t.get('size', 0) * (1.0 - (progress / 100.0))
+            eta_seconds = int(bytes_remaining / down_speed_raw)
+            if eta_seconds > 0:
+                m, s = divmod(eta_seconds, 60)
+                h, m = divmod(m, 60)
+                if h > 0:
+                    eta_str = f"  |  ETA: {h}h {m}m"
+                else:
+                    eta_str = f"  |  ETA: {m}m {s}s"
+        
+        sub_text = f"{status}  |  {size_str}  |  ↓ {d_speed}  |  ↑ {u_speed}{eta_str}"
         painter.drawText(card_rect.adjusted(15, 40, -15, 0), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop, sub_text)
 
         # Draw Progress Bar
@@ -119,7 +132,7 @@ class TorrentCardDelegate(QStyledItemDelegate):
             chunk_width = int((progress / 100.0) * prog_rect.width())
             chunk_rect = QRect(prog_rect.left(), prog_rect.top(), chunk_width, prog_rect.height())
             
-            grad = QLinearGradient(chunk_rect.topLeft(), chunk_rect.topRight())
+            grad = QLinearGradient(QPointF(chunk_rect.topLeft()), QPointF(chunk_rect.topRight()))
             grad.setColorAt(0.0, self.prog_chunk1)
             grad.setColorAt(1.0, self.prog_chunk2)
             
